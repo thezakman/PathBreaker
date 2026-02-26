@@ -10,36 +10,23 @@ public class FuzzResult {
     public final String rawPath;
     public final Integer statusCode;
     public final int bodyLength;
-    public final String responseHeaders;
-    public final String responseBody;
     public String note;
     public final boolean isInteresting;
-    public final String rawRequest;
     public final burp.api.montoya.http.message.HttpRequestResponse reqResp;
 
     public FuzzResult(String label, String rawPath, Integer statusCode,
-            int bodyLength, String responseHeaders, String responseBody,
-            String note, String rawRequest, burp.api.montoya.http.message.HttpRequestResponse reqResp) {
+            int bodyLength, String note, burp.api.montoya.http.message.HttpRequestResponse reqResp) {
         this.label = label;
         this.rawPath = rawPath;
         this.statusCode = statusCode;
         this.bodyLength = bodyLength;
-        this.responseHeaders = responseHeaders != null ? responseHeaders : "";
         this.note = note != null ? note : "";
-        this.rawRequest = rawRequest != null ? rawRequest : "";
         this.reqResp = reqResp;
-
-        // Truncate body to 500KB
-        if (responseBody != null && responseBody.length() > MAX_BODY) {
-            this.responseBody = responseBody.substring(0, MAX_BODY) + "\n\n[... truncated]";
-        } else {
-            this.responseBody = responseBody != null ? responseBody : "";
-        }
 
         this.isInteresting = statusCode != null && INTERESTING.contains(statusCode);
     }
 
-    public static FuzzResult error(String label, String rawPath, String note, String rawRequest) {
-        return new FuzzResult(label, rawPath, null, 0, "", "", note, rawRequest, null);
+    public static FuzzResult error(String label, String rawPath, String note) {
+        return new FuzzResult(label, rawPath, null, 0, note, null);
     }
 }

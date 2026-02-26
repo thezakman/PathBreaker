@@ -4,9 +4,9 @@ import burp.api.montoya.MontoyaApi;
 import burp.api.montoya.http.message.requests.HttpRequest;
 import burp.api.montoya.http.message.responses.HttpResponse;
 import burp.api.montoya.http.message.HttpRequestResponse;
-import burp.api.montoya.ui.editor.EditorOptions;
-import burp.api.montoya.ui.editor.HttpRequestEditor;
-import burp.api.montoya.ui.editor.HttpResponseEditor;
+import burp.IMessageEditor;
+import burp.IMessageEditorController;
+import burp.IHttpService;
 
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
@@ -24,7 +24,7 @@ import burp.api.montoya.scanner.audit.issues.AuditIssue;
 import burp.api.montoya.scanner.audit.issues.AuditIssueConfidence;
 import burp.api.montoya.scanner.audit.issues.AuditIssueSeverity;
 
-public class PathBreakerTab {
+public class PathBreakerTab implements IMessageEditorController {
 
     // Dark-theme colors
     private static final Color BG = new Color(0x1e1e1e);
@@ -43,8 +43,8 @@ public class PathBreakerTab {
     private final JPanel mainPanel;
 
     // Config controls
-    private HttpRequestEditor requestEditor;
-    private HttpResponseEditor responseEditor;
+    private IMessageEditor requestEditor;
+    private IMessageEditor responseEditor;
     private JComboBox<String> injectModeBox;
     private JComboBox<String> fuzzTargetBox;
     private JCheckBox permuteHeadersBox;
@@ -110,11 +110,15 @@ public class PathBreakerTab {
         this.currentTarget = reqResp;
         SwingUtilities.invokeLater(() -> {
             String urlStr = reqResp.request().url();
-            requestEditor.setRequest(reqResp.request());
-            if (reqResp.response() != null) {
-                responseEditor.setResponse(reqResp.response());
-            } else {
-                responseEditor.setResponse(burp.api.montoya.http.message.responses.HttpResponse.httpResponse(""));
+            if (requestEditor != null) {
+                requestEditor.setMessage(reqResp.request().toByteArray().getBytes(), true);
+            }
+            if (responseEditor != null) {
+                if (reqResp.response() != null) {
+                    responseEditor.setMessage(reqResp.response().toByteArray().getBytes(), false);
+                } else {
+                    responseEditor.setMessage(new byte[0], false);
+                }
             }
             for (int i = 0; i < headersTableModel.getRowCount(); i++) {
                 if ("Referer".equals(headersTableModel.getValueAt(i, 1))) {
@@ -185,7 +189,7 @@ public class PathBreakerTab {
                 Image img = originalIcon.getImage();
                 // Resize if needed, adjust to reasonable width like 200px while maintaining
                 // aspect ratio
-                int newWidth = 300;
+                int newWidth = 512;
                 int newHeight = (int) ((double) originalIcon.getIconHeight() / originalIcon.getIconWidth() * newWidth);
                 Image resizedImg = img.getScaledInstance(newWidth, newHeight, Image.SCALE_SMOOTH);
                 JLabel logoLabel = new JLabel(new ImageIcon(resizedImg));
@@ -197,7 +201,7 @@ public class PathBreakerTab {
             // If image fails to load, just ignore
         }
 
-        JLabel title = styled(new JLabel("PathBreaker v1.2"), ACCENT);
+        JLabel title = styled(new JLabel("PathBreaker v1.4"), ACCENT);
         title.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 18));
         title.setAlignmentX(Component.CENTER_ALIGNMENT);
 
@@ -306,6 +310,8 @@ public class PathBreakerTab {
 
         JButton addBtn = makeButton("+ Add Row", GREEN.darker().darker(), FG);
         JButton remBtn = makeButton("- Remove Selected", RED.darker().darker(), FG);
+        JButton clearBtnHeaders = makeButton("Clear All", BG_MID, FG);
+        JButton loadBtn = makeButton("Load File...", ACCENT, Color.WHITE);
         JButton allOnBtn = makeButton("All On", BG_MID, FG);
         JButton allOffBtn = makeButton("All Off", BG_MID, FG);
 
@@ -315,6 +321,8 @@ public class PathBreakerTab {
         wbtnRow.add(wlbl);
         wbtnRow.add(addBtn);
         wbtnRow.add(remBtn);
+        wbtnRow.add(clearBtnHeaders);
+        wbtnRow.add(loadBtn);
         wbtnRow.add(allOnBtn);
         wbtnRow.add(allOffBtn);
         wbtnRow.add(Box.createHorizontalStrut(15));
@@ -357,6 +365,7 @@ public class PathBreakerTab {
                 headersTableModel.removeRow(headersTable.convertRowIndexToModel(selected[i]));
             }
         });
+        clearBtnHeaders.addActionListener(e -> headersTableModel.setRowCount(0));
         allOnBtn.addActionListener(e -> {
             for (int i = 0; i < headersTableModel.getRowCount(); i++)
                 headersTableModel.setValueAt(true, i, 0);
@@ -364,6 +373,30 @@ public class PathBreakerTab {
         allOffBtn.addActionListener(e -> {
             for (int i = 0; i < headersTableModel.getRowCount(); i++)
                 headersTableModel.setValueAt(false, i, 0);
+        });
+        loadBtn.addActionListener(e -> {
+            JFileChooser chooser = new JFileChooser();
+            int result = chooser.showOpenDialog(mainPanel);
+            if (result == JFileChooser.APPROVE_OPTION) {
+                java.io.File file = chooser.getSelectedFile();
+                try {
+                    java.util.List<String> lines = java.nio.file.Files.readAllLines(file.toPath());
+                    for (String line : lines) {
+                        line = line.trim();
+                        if (!line.isEmpty() && !line.startsWith("#")) {
+                            int colonIdx = line.indexOf(':');
+                            if (colonIdx > 0) {
+                                String hName = line.substring(0, colonIdx).trim();
+                                String hVal = line.substring(colonIdx + 1).trim();
+                                headersTableModel.addRow(new Object[] { true, hName, hVal });
+                            }
+                        }
+                    }
+                } catch (Exception ex) {
+                    JOptionPane.showMessageDialog(mainPanel, "Error loading file: " + ex.getMessage(), "Error",
+                            JOptionPane.ERROR_MESSAGE);
+                }
+            }
         });
 
         bar.add(row1);
@@ -459,11 +492,14 @@ public class PathBreakerTab {
         tableScroll.setBorder(BorderFactory.createLineBorder(BG_LIGHT));
 
         // ── Top: side-by-side Request/Response ──
-        requestEditor = api.userInterface().createHttpRequestEditor();
-        JPanel reqPanel = detailPanel("Request", requestEditor.uiComponent());
+        if (PathBreakerExtension.legacyCallbacks != null) {
+            requestEditor = PathBreakerExtension.legacyCallbacks.createMessageEditor(this, false);
+            responseEditor = PathBreakerExtension.legacyCallbacks.createMessageEditor(this, false);
+        }
 
-        responseEditor = api.userInterface().createHttpResponseEditor(EditorOptions.READ_ONLY);
-        JPanel respPanel = detailPanel("Response", responseEditor.uiComponent());
+        JPanel reqPanel = detailPanel("Request", requestEditor != null ? requestEditor.getComponent() : new JPanel());
+        JPanel respPanel = detailPanel("Response",
+                responseEditor != null ? responseEditor.getComponent() : new JPanel());
 
         JSplitPane topSplit = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, reqPanel, respPanel);
         topSplit.setResizeWeight(0.5);
@@ -631,14 +667,14 @@ public class PathBreakerTab {
     }
 
     private void startFuzz() {
-        if (currentTarget == null || requestEditor.getRequest() == null) {
+        if (currentTarget == null || requestEditor.getMessage() == null || requestEditor.getMessage().length == 0) {
             JOptionPane.showMessageDialog(mainPanel,
                     "No target set or base request is empty.\nRight-click a request in Proxy/Repeater → Send to PathBreaker.",
                     "PathBreaker", JOptionPane.WARNING_MESSAGE);
             return;
         }
 
-        String baseRequestRaw = requestEditor.getRequest().toString();
+        String baseRequestRaw = new String(requestEditor.getMessage(), java.nio.charset.StandardCharsets.UTF_8);
 
         // Extract base path from request
         String basePath = "/";
@@ -715,7 +751,7 @@ public class PathBreakerTab {
                     int t = tested.incrementAndGet();
                     if (result.isInteresting) {
                         hits.incrementAndGet();
-                        if (result.reqResp != null) {
+                        if (result.reqResp != null && result.statusCode != null && result.statusCode == 200) {
                             AuditIssue issue = AuditIssue.auditIssue(
                                     "PathBreaker Fuzz Hits",
                                     "PathBreaker discovered a potentially interesting response (" + result.statusCode
@@ -764,8 +800,10 @@ public class PathBreakerTab {
     private void clearResults() {
         results.clear();
         tableModel.setRowCount(0);
-        requestEditor.setRequest(HttpRequest.httpRequest(""));
-        responseEditor.setResponse(HttpResponse.httpResponse(""));
+        if (requestEditor != null)
+            requestEditor.setMessage(new byte[0], true);
+        if (responseEditor != null)
+            responseEditor.setMessage(new byte[0], false);
         progressBar.setValue(0);
         progressBar.setString("Ready");
         statusLabel.setText("Idle");
@@ -780,17 +818,24 @@ public class PathBreakerTab {
         tableModel.addRow(new Object[] {
                 idx, statusObj, r.bodyLength, r.rawPath, r.label, r.note
         });
-        // Auto-scroll to bottom (on the view)
-        int lastViewIdx = resultsTable.getRowCount() - 1;
-        if (lastViewIdx >= 0) {
-            resultsTable.scrollRectToVisible(resultsTable.getCellRect(lastViewIdx, 0, true));
+        // Throttle auto-scroll: only scroll if the user is already at the bottom
+        JScrollPane scrollPane = (JScrollPane) resultsTable.getParent().getParent();
+        JScrollBar verticalBar = scrollPane.getVerticalScrollBar();
+        boolean isAtBottom = (verticalBar.getValue() + verticalBar.getVisibleAmount() >= verticalBar.getMaximum() - 30);
+
+        if (isAtBottom) {
+            int lastViewIdx = resultsTable.getRowCount() - 1;
+            if (lastViewIdx >= 0) {
+                resultsTable.scrollRectToVisible(resultsTable.getCellRect(lastViewIdx, 0, true));
+            }
         }
     }
 
     private void onRowSelected() {
         int viewRow = resultsTable.getSelectedRow();
         if (viewRow < 0) {
-            responseEditor.setResponse(HttpResponse.httpResponse(""));
+            if (responseEditor != null)
+                responseEditor.setMessage(new byte[0], false);
             return;
         }
         int row = resultsTable.convertRowIndexToModel(viewRow);
@@ -800,19 +845,19 @@ public class PathBreakerTab {
         FuzzResult r = results.get(row);
 
         if (r.reqResp != null && r.reqResp.request() != null) {
-            requestEditor.setRequest(r.reqResp.request());
-        } else if (r.rawRequest != null) {
-            HttpRequest req = HttpRequest.httpRequest(currentTarget.request().httpService(),
-                    burp.api.montoya.core.ByteArray.byteArray(r.rawRequest));
-            requestEditor.setRequest(req);
+            if (requestEditor != null)
+                requestEditor.setMessage(r.reqResp.request().toByteArray().getBytes(), true);
         } else {
-            requestEditor.setRequest(HttpRequest.httpRequest(""));
+            if (requestEditor != null)
+                requestEditor.setMessage(new byte[0], true);
         }
 
         if (r.reqResp != null && r.reqResp.response() != null) {
-            responseEditor.setResponse(r.reqResp.response());
+            if (responseEditor != null)
+                responseEditor.setMessage(r.reqResp.response().toByteArray().getBytes(), false);
         } else {
-            responseEditor.setResponse(burp.api.montoya.http.message.responses.HttpResponse.httpResponse(""));
+            if (responseEditor != null)
+                responseEditor.setMessage(new byte[0], false);
         }
     }
 
@@ -940,4 +985,44 @@ public class PathBreakerTab {
         }
     }
 
+    // ────────────────────────────────────────────────────────────────────────
+    // IMessageEditorController implementation for Render tab
+    // ────────────────────────────────────────────────────────────────────────
+
+    @Override
+    public IHttpService getHttpService() {
+        if (currentTarget == null || currentTarget.request() == null)
+            return null;
+        burp.api.montoya.http.HttpService ts = currentTarget.request().httpService();
+        return new IHttpService() {
+            @Override
+            public String getHost() {
+                return ts.host();
+            }
+
+            @Override
+            public int getPort() {
+                return ts.port();
+            }
+
+            @Override
+            public String getProtocol() {
+                return ts.secure() ? "https" : "http";
+            }
+        };
+    }
+
+    @Override
+    public byte[] getRequest() {
+        if (requestEditor == null)
+            return new byte[0];
+        return requestEditor.getMessage();
+    }
+
+    @Override
+    public byte[] getResponse() {
+        if (responseEditor == null)
+            return new byte[0];
+        return responseEditor.getMessage();
+    }
 }

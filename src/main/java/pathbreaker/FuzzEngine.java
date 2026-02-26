@@ -13,6 +13,9 @@ import java.util.function.Consumer;
 
 public class FuzzEngine {
 
+    private static final Set<Integer> INTERESTING = Set.of(200, 201, 206, 301, 302, 307, 308);
+
+
     // ── Builtin wordlist ported directly from exemplo.py ──
     public static final String BUILTIN_WORDLIST = "??../../\n" +
             "?..\n" +
@@ -348,23 +351,10 @@ public class FuzzEngine {
      * history).
      */
     public static FuzzResult sendRequest(MontoyaApi api, HttpService service, String rawPath,
-            String label, Map<String, String> extraHeaders, String baseRequestRaw) {
+            String label, Map<String, String> extraHeaders, String method, String protocol,
+            String headersBlock, String bodyBlock, boolean saveAll) {
 
-        baseRequestRaw = baseRequestRaw.replaceAll("\r\n", "\n").replaceAll("\n", "\r\n");
-
-        String method = "GET";
-        String protocol = "HTTP/1.1";
-        int firstLineEnd = baseRequestRaw.indexOf("\r\n");
-        if (firstLineEnd > 0) {
-            String firstLine = baseRequestRaw.substring(0, firstLineEnd);
-            String[] parts = firstLine.split(" ");
-            if (parts.length >= 3) {
-                method = parts[0];
-                protocol = parts[2];
-            }
-        }
-
-        StringBuilder reqBuilder = new StringBuilder();
+        StringBuilder reqBuilder = new StringBuilder(method.length() + rawPath.length() + protocol.length() + headersBlock.length() + bodyBlock.length() + 256);
         reqBuilder.append(method).append(" ").append(rawPath).append(" ").append(protocol).append("\r\n");
 
         Set<String> addedHeadersLower = new HashSet<>();
@@ -372,16 +362,6 @@ public class FuzzEngine {
             for (String key : extraHeaders.keySet()) {
                 addedHeadersLower.add(key.toLowerCase());
             }
-        }
-
-        int headersEnd = baseRequestRaw.indexOf("\r\n\r\n");
-        String headersBlock = "";
-        String bodyBlock = "";
-        if (headersEnd > 0) {
-            headersBlock = baseRequestRaw.substring(firstLineEnd + 2, headersEnd);
-            bodyBlock = baseRequestRaw.substring(headersEnd + 4);
-        } else {
-            headersBlock = baseRequestRaw.substring(firstLineEnd + 2);
         }
 
         for (String line : headersBlock.split("\r\n")) {
@@ -425,36 +405,27 @@ public class FuzzEngine {
             var response = api.http().sendRequest(request);
 
             if (response == null || response.response() == null) {
-                return FuzzResult.error(label, rawPath, "no response", rawRequestStr);
+                return FuzzResult.error(label, rawPath, "no response");
             }
 
             var httpResponse = response.response();
-            byte[] bodyBytes = httpResponse.toByteArray().getBytes();
+            int statusCode = (int) httpResponse.statusCode();
             int bodyLength = httpResponse.body().length();
-
-            StringBuilder hdrs = new StringBuilder();
-            if (httpResponse.headers() != null) {
-                for (burp.api.montoya.http.message.HttpHeader h : httpResponse.headers()) {
-                    hdrs.append(h.name()).append(": ").append(h.value()).append("\n");
-                }
+            
+            boolean isInteresting = INTERESTING.contains(statusCode);
+            burp.api.montoya.http.message.HttpRequestResponse detachedReqResp = null;
+            
+            if (saveAll || isInteresting || "[baseline]".equals(label)) {
+                detachedReqResp = response.copyToTempFile();
             }
 
-            String bodyStr = new String(bodyBytes, java.nio.charset.StandardCharsets.UTF_8);
-
-            // Use copyToTempFile to create a persistent, detached instance of the complete
-            // HttpRequestResponse
-            // This prevents Native Binding NPE while preserving the HttpService needed for
-            // the Render tab to work.
-            burp.api.montoya.http.message.HttpRequestResponse detachedReqResp = response.copyToTempFile();
-
-            return new FuzzResult(label, rawPath, (int) httpResponse.statusCode(),
-                    bodyLength, hdrs.toString(), bodyStr, "", rawRequestStr, detachedReqResp);
+            return new FuzzResult(label, rawPath, statusCode, bodyLength, "", detachedReqResp);
 
         } catch (Exception e) {
             String msg = e.getMessage();
             if (msg == null)
                 msg = e.getClass().getSimpleName();
-            return FuzzResult.error(label, rawPath, msg, rawRequestStr);
+            return FuzzResult.error(label, rawPath, msg);
         }
     }
 
@@ -466,17 +437,42 @@ public class FuzzEngine {
             FuzzConfig config, Consumer<FuzzResult> onResult,
             Runnable onDone) {
 
-        // Extract base path from request
-        String basePath = "/";
+        baseRequestRaw = baseRequestRaw.replaceAll("\r\n", "\n").replaceAll("\n", "\r\n");
+        String method = "GET";
+        String protocol = "HTTP/1.1";
         int firstLineEnd = baseRequestRaw.indexOf("\r\n");
+        String basePath = "/";
+
         if (firstLineEnd > 0) {
             String firstLine = baseRequestRaw.substring(0, firstLineEnd);
             String[] parts = firstLine.split(" ");
-            if (parts.length >= 2) {
+            if (parts.length >= 3) {
+                method = parts[0];
+                basePath = parts[1];
+                protocol = parts[2];
+            } else if (parts.length >= 2) {
+                method = parts[0];
                 basePath = parts[1];
             }
         }
-        // Strip query string
+
+        int headersEnd = baseRequestRaw.indexOf("\r\n\r\n");
+        String headersBlock = "";
+        String bodyBlock = "";
+        if (headersEnd > 0) {
+            headersBlock = baseRequestRaw.substring(firstLineEnd + 2, headersEnd);
+            bodyBlock = baseRequestRaw.substring(headersEnd + 4);
+        } else if (firstLineEnd > 0) {
+            headersBlock = baseRequestRaw.substring(firstLineEnd + 2);
+        }
+
+        final String fMethod = method;
+        final String fProtocol = protocol;
+        final String fHeadersBlock = headersBlock;
+        final String fBodyBlock = bodyBlock;
+        final boolean fSaveAll = !config.onlyHits;
+
+        // Strip query string for path building
         int q = basePath.indexOf('?');
         if (q >= 0)
             basePath = basePath.substring(0, q);
@@ -532,16 +528,11 @@ public class FuzzEngine {
         // Retain futures so we can cancel on stop
         List<Future<?>> futures = new ArrayList<>();
 
-        // Explicit Baseline task
+        // Explicit Baseline task executed synchronously so it's always Row 0
         final String finalBasePath = basePath;
-        Future<?> fBase = executor.submit(() -> {
-            if (Thread.currentThread().isInterrupted())
-                return;
-            FuzzResult result = sendRequest(api, service, finalBasePath, "[baseline]", Collections.emptyMap(),
-                    baseRequestRaw);
-            SwingUtilities.invokeLater(() -> onResult.accept(result));
-        });
-        futures.add(fBase);
+        FuzzResult baseResult = sendRequest(api, service, finalBasePath, "[baseline]", Collections.emptyMap(),
+                fMethod, fProtocol, fHeadersBlock, fBodyBlock, true);
+        SwingUtilities.invokeLater(() -> onResult.accept(baseResult));
 
         for (String[] pair : allPaths) {
             String pathLabel = pair[0];
@@ -579,7 +570,7 @@ public class FuzzEngine {
 
                     FuzzResult result;
                     try {
-                        result = sendRequest(api, service, rawPath, fLabel, fHeaders, baseRequestRaw);
+                        result = sendRequest(api, service, rawPath, fLabel, fHeaders, fMethod, fProtocol, fHeadersBlock, fBodyBlock, fSaveAll);
                     } catch (Exception e) {
                         // If interrupted during sendRequest, just return
                         return;
