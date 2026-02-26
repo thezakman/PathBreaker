@@ -15,7 +15,6 @@ public class FuzzEngine {
 
     private static final Set<Integer> INTERESTING = Set.of(200, 201, 206, 301, 302, 307, 308);
 
-
     // ── Builtin wordlist ported directly from exemplo.py ──
     public static final String BUILTIN_WORDLIST = "??../../\n" +
             "?..\n" +
@@ -354,7 +353,8 @@ public class FuzzEngine {
             String label, Map<String, String> extraHeaders, String method, String protocol,
             String headersBlock, String bodyBlock, boolean saveAll) {
 
-        StringBuilder reqBuilder = new StringBuilder(method.length() + rawPath.length() + protocol.length() + headersBlock.length() + bodyBlock.length() + 256);
+        StringBuilder reqBuilder = new StringBuilder(method.length() + rawPath.length() + protocol.length()
+                + headersBlock.length() + bodyBlock.length() + 256);
         reqBuilder.append(method).append(" ").append(rawPath).append(" ").append(protocol).append("\r\n");
 
         Set<String> addedHeadersLower = new HashSet<>();
@@ -411,10 +411,10 @@ public class FuzzEngine {
             var httpResponse = response.response();
             int statusCode = (int) httpResponse.statusCode();
             int bodyLength = httpResponse.body().length();
-            
+
             boolean isInteresting = INTERESTING.contains(statusCode);
             burp.api.montoya.http.message.HttpRequestResponse detachedReqResp = null;
-            
+
             if (saveAll || isInteresting || "[baseline]".equals(label)) {
                 detachedReqResp = response.copyToTempFile();
             }
@@ -528,72 +528,84 @@ public class FuzzEngine {
         // Retain futures so we can cancel on stop
         List<Future<?>> futures = new ArrayList<>();
 
-        // Explicit Baseline task executed synchronously so it's always Row 0
         final String finalBasePath = basePath;
-        FuzzResult baseResult = sendRequest(api, service, finalBasePath, "[baseline]", Collections.emptyMap(),
-                fMethod, fProtocol, fHeadersBlock, fBodyBlock, true);
-        SwingUtilities.invokeLater(() -> onResult.accept(baseResult));
-
-        for (String[] pair : allPaths) {
-            String pathLabel = pair[0];
-            String rawPath = pair[1];
-
-            for (Map<String, String> headers : headerPayloads) {
-                String headLabel = "";
-                if (!headers.isEmpty()) {
-                    if (headers.size() == 1) {
-                        headLabel = "[H: " + headers.keySet().iterator().next() + "]";
-                    } else if (headers.size() == config.extraHeaders.size()) {
-                        headLabel = "[H: All]";
-                    } else {
-                        headLabel = "[H: " + headers.size() + "]";
-                    }
+        Thread orchestrator = new Thread(() -> {
+            try {
+                // Explicit Baseline task executed synchronously on background thread so it's always Row 0
+                FuzzResult baseResult = sendRequest(api, service, finalBasePath, "[baseline]", Collections.emptyMap(),
+                        fMethod, fProtocol, fHeadersBlock, fBodyBlock, true);
+                if (!executor.isShutdown()) {
+                    SwingUtilities.invokeLater(() -> onResult.accept(baseResult));
                 }
-
-                String finalLabel = pathLabel;
-                if (!headLabel.isEmpty()) {
-                    finalLabel = (finalLabel.equals("[base]") ? "" : finalLabel + " ") + headLabel;
-                }
-                if (finalLabel.trim().isEmpty())
-                    finalLabel = "[base]";
-
-                final String fLabel = finalLabel.trim();
-                final Map<String, String> fHeaders = headers;
-
-                if ("[base]".equals(fLabel) && fHeaders.isEmpty()) {
-                    continue; // Already processed as explicit [baseline]
-                }
-
-                Future<?> f = executor.submit(() -> {
-                    if (Thread.currentThread().isInterrupted())
-                        return;
-
-                    FuzzResult result;
-                    try {
-                        result = sendRequest(api, service, rawPath, fLabel, fHeaders, fMethod, fProtocol, fHeadersBlock, fBodyBlock, fSaveAll);
-                    } catch (Exception e) {
-                        // If interrupted during sendRequest, just return
-                        return;
-                    }
-
-                    if (Thread.currentThread().isInterrupted())
-                        return;
-
-                    // Apply filters
-                    if (!filterCodes.isEmpty() && !filterCodes.contains(result.statusCode))
-                        return;
-                    if (config.onlyHits && !result.isInteresting)
-                        return;
-                    if (config.hideErrors && result.statusCode == null)
-                        return;
-
-                    SwingUtilities.invokeLater(() -> onResult.accept(result));
-                });
-                futures.add(f);
+            } catch (Exception e) {
+                // suppress
             }
-        }
-        // Shutdown watcher
-        Thread watcher = new Thread(() -> {
+
+            for (String[] pair : allPaths) {
+                if (executor.isShutdown() || Thread.currentThread().isInterrupted()) break;
+
+                String pathLabel = pair[0];
+                String rawPath = pair[1];
+
+                for (Map<String, String> headers : headerPayloads) {
+                    if (executor.isShutdown() || Thread.currentThread().isInterrupted()) break;
+
+                    String headLabel = "";
+                    if (!headers.isEmpty()) {
+                        if (headers.size() == 1) {
+                            headLabel = "[H: " + headers.keySet().iterator().next() + "]";
+                        } else if (headers.size() == config.extraHeaders.size()) {
+                            headLabel = "[H: All]";
+                        } else {
+                            headLabel = "[H: " + headers.size() + "]";
+                        }
+                    }
+
+                    String finalLabel = pathLabel;
+                    if (!headLabel.isEmpty()) {
+                        finalLabel = (finalLabel.equals("[base]") ? "" : finalLabel + " ") + headLabel;
+                    }
+                    if (finalLabel.trim().isEmpty())
+                        finalLabel = "[base]";
+
+                    final String fLabel = finalLabel.trim();
+                    final Map<String, String> fHeaders = headers;
+
+                                
+                    if ("[base]".equals(fLabel) && fHeaders.isEmpty()) {
+                        continue; // Already processed as explicit [baseline]
+                    }
+
+                    Future<?> f = executor.submit(() -> {
+                        if (Thread.currentThread().isInterrupted())
+                            return;
+
+                        FuzzResult result;
+                        try {
+                            result = sendRequest(api, service, rawPath, fLabel, fHeaders, fMethod, fProtocol, fHeadersBlock, fBodyBlock, fSaveAll);
+                        } catch (Exception e) {
+                            // If interrupted during sendRequest, just return
+                            return;
+                        }
+
+                        if (Thread.currentThread().isInterrupted())
+                            return;
+
+                        // Apply filters
+                        if (!filterCodes.isEmpty() && !filterCodes.contains(result.statusCode))
+                            return;
+                        if (config.onlyHits && !result.isInteresting)
+                            return;
+                        if (config.hideErrors && result.statusCode == null)
+                            return;
+
+                        SwingUtilities.invokeLater(() -> onResult.accept(result));
+                    });
+                    futures.add(f);
+                }
+            }
+
+            // Shutdown watcher
             executor.shutdown();
             try {
                 executor.awaitTermination(10, TimeUnit.MINUTES);
@@ -602,8 +614,9 @@ public class FuzzEngine {
             }
             SwingUtilities.invokeLater(onDone);
         });
-        watcher.setDaemon(true);
-        watcher.start();
+        
+        orchestrator.setDaemon(true);
+        orchestrator.start();
 
         return executor;
     }
