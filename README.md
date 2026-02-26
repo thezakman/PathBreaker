@@ -1,7 +1,7 @@
 <div align="center">
   <img src="src/main/resources/pathbreaker/PathBreaker.png" alt="PathBreaker Logo" width="512"/>
 
-  # PathBreaker
+  # PathBreaker v1.3
   **A professional path and header fuzzing extension for Burp Suite**
 
   [![Java](https://img.shields.io/badge/Java-17-orange?logo=openjdk)](https://www.java.com/)
@@ -20,11 +20,11 @@ PathBreaker is a Burp Suite extension built for penetration testers who need to 
 ## Features
 
 - **Path Fuzzing** — Four injection modes: `tail`, `prefix`, `mid:N`, and `replace`
-- **Header Fuzzing** — Inject and permute custom HTTP headers
+- **Header Fuzzing** — Inject and permute custom HTTP headers using the built-in dictionary or importing custom wordlists via "Load File..."
 - **Programmatic Variations** — Auto-generates protocol-level path anomalies (encoding tricks, slash variants, traversal prefixes, etc.)
 - **Built-in Wordlist** — 212+ curated path traversal and access-control bypass payloads
 - **Custom Payloads** — Import your own wordlist from a file
-- **Header Dictionary** — Manage headers with per-entry enable/disable toggles
+- **Header Dictionary** — Manage headers with per-entry enable/disable toggles, plus "Clear All" for quick resets
 - **Multi-threaded Engine** — Configurable thread pool (1–50 threads)
 - **Real-time Results** — Live progress tracking with color-coded status codes
 - **Result Filtering** — Filter by status codes, "Only Hits", "Hide Errors"
@@ -80,7 +80,7 @@ build/libs/PathBreaker-all.jar
 | Tab | Description |
 |-----|-------------|
 | **Fuzzer** | Main interface — configure and run fuzzing sessions |
-| **Headers** | Manage the header dictionary (add, remove, toggle) |
+| **Headers** | Manage the header dictionary (add, remove, toggle, load from file, clear) |
 | **Payloads** | View or import custom payload wordlists |
 | **About** | Project information and usage tips |
 
@@ -158,7 +158,8 @@ PathBreaker/
 - **Build:** Gradle + Shadow JAR plugin (fat JAR)
 - **Concurrency:** `ThreadPoolExecutor` with graceful `shutdownNow()` support
 - **Thread Safety:** `AtomicBoolean` / `AtomicInteger` for state; `SwingUtilities.invokeLater` for UI updates
-- **Memory:** Response bodies capped at 512 KB to prevent bloat
+- **Memory & I/O:** Highly optimized engine — `FuzzResult` relies on native Burp `HttpRequestResponse` binary references to prevent JVM RAM exhaustion. Smart disk I/O logic only writes "Interesting" responses to temp files, preserving SSD health.
+- **CPU & UI Throttling:** Baseline payload orchestration executes asynchronously; parsed HTTP structures are separated from the main hot-loop. The UI thread dynamically throttles scroll events based on `JScrollbar` position to prevent EDT freezes.
 - **Architecture:** MVC-style separation — UI (`PathBreakerTab`), engine (`FuzzEngine`), models (`FuzzConfig`, `FuzzResult`)
 
 ---
