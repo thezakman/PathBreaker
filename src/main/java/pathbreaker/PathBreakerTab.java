@@ -20,6 +20,9 @@ import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import burp.api.montoya.scanner.audit.issues.AuditIssue;
+import burp.api.montoya.scanner.audit.issues.AuditIssueConfidence;
+import burp.api.montoya.scanner.audit.issues.AuditIssueSeverity;
 
 public class PathBreakerTab {
 
@@ -194,7 +197,7 @@ public class PathBreakerTab {
             // If image fails to load, just ignore
         }
 
-        JLabel title = styled(new JLabel("PathBreaker v1.1"), ACCENT);
+        JLabel title = styled(new JLabel("PathBreaker v1.2"), ACCENT);
         title.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 18));
         title.setAlignmentX(Component.CENTER_ALIGNMENT);
 
@@ -710,8 +713,25 @@ public class PathBreakerTab {
                         return; // hard stop
                     addResult(result);
                     int t = tested.incrementAndGet();
-                    if (result.isInteresting)
+                    if (result.isInteresting) {
                         hits.incrementAndGet();
+                        if (result.reqResp != null) {
+                            AuditIssue issue = AuditIssue.auditIssue(
+                                    "PathBreaker Fuzz Hits",
+                                    "PathBreaker discovered a potentially interesting response (" + result.statusCode
+                                            + ") at: <b>" + result.rawPath + "</b><br><br>Payload Label: <b>"
+                                            + result.label + "</b>",
+                                    "Review the endpoints and ensure proper authorization and access controls are enforced.",
+                                    currentTarget.request().url(),
+                                    AuditIssueSeverity.INFORMATION,
+                                    AuditIssueConfidence.FIRM,
+                                    "N/A", // background
+                                    "N/A", // remediation
+                                    AuditIssueSeverity.INFORMATION,
+                                    result.reqResp);
+                            api.siteMap().add(issue);
+                        }
+                    }
                     int h = hits.get();
                     progressBar.setValue(t);
                     progressBar.setString(t + " / " + total + " tested — " + h + " hits");
@@ -725,6 +745,7 @@ public class PathBreakerTab {
                         progressBar.setValue(total);
                         progressBar.setString("Done — " + t + " tested, " + h + " hits");
                         statusLabel.setText("Finished");
+
                     }
                 });
     }

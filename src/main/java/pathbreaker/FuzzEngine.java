@@ -8,10 +8,8 @@ import burp.api.montoya.core.ByteArray;
 import javax.swing.SwingUtilities;
 import java.util.*;
 import java.util.concurrent.*;
+
 import java.util.function.Consumer;
-import burp.api.montoya.scanner.audit.issues.AuditIssue;
-import burp.api.montoya.scanner.audit.issues.AuditIssueConfidence;
-import burp.api.montoya.scanner.audit.issues.AuditIssueSeverity;
 
 public class FuzzEngine {
 
@@ -598,30 +596,11 @@ public class FuzzEngine {
                     if (config.hideErrors && result.statusCode == null)
                         return;
 
-                    // Publish to Burp Issues if interesting
-                    if (result.isInteresting && result.reqResp != null) {
-                        AuditIssue issue = AuditIssue.auditIssue(
-                                "PathBreaker Fuzz Hit: " + result.label,
-                                "PathBreaker discovered a potentially interesting response (" + result.statusCode + ") at: " + result.rawPath,
-                                "Review the response to determine if it exposes unintended access or information.",
-                                result.reqResp.request().url(),
-                                AuditIssueSeverity.INFORMATION,
-                                AuditIssueConfidence.FIRM,
-                                "N/A", // background
-                                "N/A", // remediation
-                                AuditIssueSeverity.INFORMATION,
-                                result.reqResp
-                        );
-                        api.siteMap().add(issue);
-                    }
-                                        
-
                     SwingUtilities.invokeLater(() -> onResult.accept(result));
                 });
                 futures.add(f);
             }
         }
-
         // Shutdown watcher
         Thread watcher = new Thread(() -> {
             executor.shutdown();

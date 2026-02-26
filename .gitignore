@@ -1,0 +1,20 @@
+# Build output
+build/
+
+# Gradle cache & metadata
+.gradle/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+*.classpath
+*.project
+.settings/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local overrides
+local.properties
