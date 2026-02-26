@@ -519,7 +519,7 @@ public class PathBreakerTab implements IMessageEditorController {
 
         // ── Top: side-by-side Request/Response ──
         if (PathBreakerExtension.legacyCallbacks != null) {
-            requestEditor = PathBreakerExtension.legacyCallbacks.createMessageEditor(this, false);
+            requestEditor = PathBreakerExtension.legacyCallbacks.createMessageEditor(this, true);
             responseEditor = PathBreakerExtension.legacyCallbacks.createMessageEditor(this, false);
         }
 
@@ -751,9 +751,9 @@ public class PathBreakerTab implements IMessageEditorController {
     }
 
     private void startFuzz() {
-        if (currentTarget == null || requestEditor.getMessage() == null || requestEditor.getMessage().length == 0) {
+        if (requestEditor == null || requestEditor.getMessage() == null || requestEditor.getMessage().length == 0) {
             JOptionPane.showMessageDialog(mainPanel,
-                    "No target set or base request is empty.\nRight-click a request in Proxy/Repeater → Send to PathBreaker.",
+                    "Base request is empty.\nPaste a request or right-click in Proxy/Repeater → Send to PathBreaker.",
                     "PathBreaker", JOptionPane.WARNING_MESSAGE);
             return;
         }
@@ -825,7 +825,37 @@ public class PathBreakerTab implements IMessageEditorController {
         progressBar.setMaximum(Math.max(total, 1));
         progressBar.setString("0 / " + total + " — 0 hits");
 
-        burp.api.montoya.http.HttpService targetService = currentTarget.request().httpService();
+        burp.api.montoya.http.HttpService targetService;
+        if (currentTarget != null) {
+            targetService = currentTarget.request().httpService();
+        } else {
+            String host = "";
+            int port = 443;
+            boolean secure = true;
+            for (String line : baseRequestRaw.split("\r\n")) {
+                if (line.toLowerCase().startsWith("host:")) {
+                    host = line.substring(5).trim();
+                    if (host.contains(":")) {
+                        String[] hp = host.split(":");
+                        host = hp[0];
+                        try {
+                            port = Integer.parseInt(hp[1]);
+                            if (port == 80 || port == 8080) secure = false;
+                        } catch (Exception ignored) {}
+                    }
+                    break;
+                }
+            }
+            if (host.isEmpty()) {
+                JOptionPane.showMessageDialog(mainPanel,
+                        "No target set and no Host header found in request.\nProvide a Host header or Send to PathBreaker from Proxy.",
+                        "PathBreaker", JOptionPane.WARNING_MESSAGE);
+                setUIEnabled(true);
+                return;
+            }
+            targetService = burp.api.montoya.http.HttpService.httpService(host, port, secure);
+        }
+
         burp.api.montoya.http.HttpService safeService = burp.api.montoya.http.HttpService.httpService(
                 targetService.host(), targetService.port(), targetService.secure());
 
@@ -861,26 +891,31 @@ public class PathBreakerTab implements IMessageEditorController {
                 () -> {
                     if (running.compareAndSet(true, false)) { // Only update UI if we were still running naturally
                         actionBtn.setText("▶ Start");
-                        actionBtn.setBackground(ACCENT);
+                        actionBtn.setBackground(GREEN);
                         int t = tested.get();
                         int h = hits.get();
                         progressBar.setValue(total);
                         progressBar.setString("Done — " + t + " tested, " + h + " hits");
                         statusLabel.setText("Finished");
-
+                        setUIEnabled(true);
                     }
                 });
     }
 
     private void stopFuzz() {
+        if (!running.get()) return;
         running.set(false);
         if (activeExecutor != null && !activeExecutor.isShutdown()) {
             activeExecutor.shutdownNow();
         }
         activeExecutor = null;
         actionBtn.setText("▶ Start");
-        actionBtn.setBackground(ACCENT);
+        actionBtn.setBackground(GREEN);
         statusLabel.setText("Stopped");
+        int t = tested.get();
+        int h = hits.get();
+        progressBar.setString("Stopped at " + t + " / " + totalCount + " — " + h + " hits");
+        setUIEnabled(true);
     }
 
     private void clearResults() {
