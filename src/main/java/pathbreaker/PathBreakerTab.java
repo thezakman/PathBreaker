@@ -1115,25 +1115,49 @@ public class PathBreakerTab implements IMessageEditorController {
 
     @Override
     public IHttpService getHttpService() {
+        int viewRow = resultsTable.getSelectedRow();
+        if (viewRow >= 0) {
+            int row = resultsTable.convertRowIndexToModel(viewRow);
+            if (row >= 0 && row < results.size()) {
+                FuzzResult r = results.get(row);
+                if (r.reqResp != null && r.reqResp.request() != null) {
+                    burp.api.montoya.http.HttpService ts = r.reqResp.request().httpService();
+                    if (ts != null) {
+                        return new IHttpService() {
+                            @Override
+                            public String getHost() { return ts.host(); }
+                            @Override
+                            public int getPort() { return ts.port(); }
+                            @Override
+                            public String getProtocol() { return ts.secure() ? "https" : "http"; }
+                        };
+                    }
+                }
+            }
+        }
+
         if (currentTarget == null || currentTarget.request() == null)
             return null;
         burp.api.montoya.http.HttpService ts = currentTarget.request().httpService();
-        return new IHttpService() {
-            @Override
-            public String getHost() {
-                return ts.host();
-            }
+        if (ts != null) {
+            return new IHttpService() {
+                @Override
+                public String getHost() {
+                    return ts.host();
+                }
 
-            @Override
-            public int getPort() {
-                return ts.port();
-            }
+                @Override
+                public int getPort() {
+                    return ts.port();
+                }
 
-            @Override
-            public String getProtocol() {
-                return ts.secure() ? "https" : "http";
-            }
-        };
+                @Override
+                public String getProtocol() {
+                    return ts.secure() ? "https" : "http";
+                }
+            };
+        }
+        return null;
     }
 
     @Override
