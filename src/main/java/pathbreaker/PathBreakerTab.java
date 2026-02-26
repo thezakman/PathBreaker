@@ -301,7 +301,7 @@ public class PathBreakerTab {
 
         JPanel wbtnRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 2));
         wbtnRow.setBackground(BG_LIGHT);
-        JLabel wlbl = styled(new JLabel("Headers Dictionary: "), FG);
+        JLabel wlbl = styled(new JLabel("Headers: "), FG);
         wlbl.setFont(wlbl.getFont().deriveFont(Font.BOLD));
 
         JButton addBtn = makeButton("+ Add Row", GREEN.darker().darker(), FG);
