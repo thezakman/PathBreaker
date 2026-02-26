@@ -311,6 +311,7 @@ public class PathBreakerTab implements IMessageEditorController {
         JButton addBtn = makeButton("+ Add Row", GREEN.darker().darker(), FG);
         JButton remBtn = makeButton("- Remove Selected", RED.darker().darker(), FG);
         JButton clearBtnHeaders = makeButton("Clear All", BG_MID, FG);
+        JButton restoreBtn = makeButton("Restore Default", BG_MID, FG);
         JButton loadBtn = makeButton("Load File...", ACCENT, Color.WHITE);
         JButton allOnBtn = makeButton("All On", BG_MID, FG);
         JButton allOffBtn = makeButton("All Off", BG_MID, FG);
@@ -322,6 +323,7 @@ public class PathBreakerTab implements IMessageEditorController {
         wbtnRow.add(addBtn);
         wbtnRow.add(remBtn);
         wbtnRow.add(clearBtnHeaders);
+        wbtnRow.add(restoreBtn);
         wbtnRow.add(loadBtn);
         wbtnRow.add(allOnBtn);
         wbtnRow.add(allOffBtn);
@@ -366,6 +368,12 @@ public class PathBreakerTab implements IMessageEditorController {
             }
         });
         clearBtnHeaders.addActionListener(e -> headersTableModel.setRowCount(0));
+        restoreBtn.addActionListener(e -> {
+            headersTableModel.setRowCount(0);
+            for (String[] def : HEADER_DEFS) {
+                headersTableModel.addRow(new Object[] { false, def[0], def[1] });
+            }
+        });
         allOnBtn.addActionListener(e -> {
             for (int i = 0; i < headersTableModel.getRowCount(); i++)
                 headersTableModel.setValueAt(true, i, 0);
@@ -379,23 +387,41 @@ public class PathBreakerTab implements IMessageEditorController {
             int result = chooser.showOpenDialog(mainPanel);
             if (result == JFileChooser.APPROVE_OPTION) {
                 java.io.File file = chooser.getSelectedFile();
-                try {
-                    java.util.List<String> lines = java.nio.file.Files.readAllLines(file.toPath());
-                    for (String line : lines) {
-                        line = line.trim();
-                        if (!line.isEmpty() && !line.startsWith("#")) {
-                            int colonIdx = line.indexOf(':');
-                            if (colonIdx > 0) {
-                                String hName = line.substring(0, colonIdx).trim();
-                                String hVal = line.substring(colonIdx + 1).trim();
-                                headersTableModel.addRow(new Object[] { true, hName, hVal });
+                loadBtn.setText("Loading...");
+                loadBtn.setEnabled(false);
+
+                new Thread(() -> {
+                    try {
+                        java.util.List<String> lines = java.nio.file.Files.readAllLines(file.toPath(),
+                                java.nio.charset.StandardCharsets.UTF_8);
+                        java.util.List<Object[]> rowsToAdd = new java.util.ArrayList<>();
+                        for (String line : lines) {
+                            line = line.trim();
+                            if (!line.isEmpty() && !line.startsWith("#")) {
+                                int colonIdx = line.indexOf(':');
+                                if (colonIdx > 0) {
+                                    String hName = line.substring(0, colonIdx).trim();
+                                    String hVal = line.substring(colonIdx + 1).trim();
+                                    rowsToAdd.add(new Object[] { true, hName, hVal });
+                                }
                             }
                         }
+                        SwingUtilities.invokeLater(() -> {
+                            for (Object[] row : rowsToAdd) {
+                                headersTableModel.addRow(row);
+                            }
+                            loadBtn.setText("Load File...");
+                            loadBtn.setEnabled(true);
+                        });
+                    } catch (Exception ex) {
+                        SwingUtilities.invokeLater(() -> {
+                            JOptionPane.showMessageDialog(mainPanel, "Error loading file: " + ex.getMessage(), "Error",
+                                    JOptionPane.ERROR_MESSAGE);
+                            loadBtn.setText("Load File...");
+                            loadBtn.setEnabled(true);
+                        });
                     }
-                } catch (Exception ex) {
-                    JOptionPane.showMessageDialog(mainPanel, "Error loading file: " + ex.getMessage(), "Error",
-                            JOptionPane.ERROR_MESSAGE);
-                }
+                }).start();
             }
         });
 
@@ -546,6 +572,7 @@ public class PathBreakerTab implements IMessageEditorController {
         JButton addBtn = makeButton("+ Add Row", GREEN.darker().darker(), FG);
         JButton remBtn = makeButton("- Remove Selected", RED.darker().darker(), FG);
         JButton clearBtnPayloads = makeButton("Clear All", BG_MID, FG);
+        JButton restoreBtn = makeButton("Restore Default", BG_MID, FG);
         JButton loadBtn = makeButton("Load File...", ACCENT, Color.WHITE);
         JButton allOnBtn = makeButton("All On", BG_MID, FG);
         JButton allOffBtn = makeButton("All Off", BG_MID, FG);
@@ -554,6 +581,7 @@ public class PathBreakerTab implements IMessageEditorController {
         wbtnRow.add(addBtn);
         wbtnRow.add(remBtn);
         wbtnRow.add(clearBtnPayloads);
+        wbtnRow.add(restoreBtn);
         wbtnRow.add(loadBtn);
         wbtnRow.add(allOnBtn);
         wbtnRow.add(allOffBtn);
@@ -600,6 +628,15 @@ public class PathBreakerTab implements IMessageEditorController {
             }
         });
         clearBtnPayloads.addActionListener(e -> payloadsTableModel.setRowCount(0));
+        restoreBtn.addActionListener(e -> {
+            payloadsTableModel.setRowCount(0);
+            String[] defaultPayloads = FuzzEngine.BUILTIN_WORDLIST.split("\n");
+            for (String payload : defaultPayloads) {
+                if (!payload.trim().isEmpty()) {
+                    payloadsTableModel.addRow(new Object[] { true, payload.trim() });
+                }
+            }
+        });
         allOnBtn.addActionListener(e -> {
             for (int i = 0; i < payloadsTableModel.getRowCount(); i++)
                 payloadsTableModel.setValueAt(true, i, 0);
@@ -613,17 +650,35 @@ public class PathBreakerTab implements IMessageEditorController {
             int result = chooser.showOpenDialog(mainPanel);
             if (result == JFileChooser.APPROVE_OPTION) {
                 java.io.File file = chooser.getSelectedFile();
-                try {
-                    java.util.List<String> lines = java.nio.file.Files.readAllLines(file.toPath());
-                    for (String line : lines) {
-                        if (!line.trim().isEmpty()) {
-                            payloadsTableModel.addRow(new Object[] { true, line });
+                loadBtn.setText("Loading...");
+                loadBtn.setEnabled(false);
+
+                new Thread(() -> {
+                    try {
+                        java.util.List<String> lines = java.nio.file.Files.readAllLines(file.toPath(),
+                                java.nio.charset.StandardCharsets.UTF_8);
+                        java.util.List<Object[]> rowsToAdd = new java.util.ArrayList<>();
+                        for (String line : lines) {
+                            if (!line.trim().isEmpty()) {
+                                rowsToAdd.add(new Object[] { true, line.trim() });
+                            }
                         }
+                        SwingUtilities.invokeLater(() -> {
+                            for (Object[] row : rowsToAdd) {
+                                payloadsTableModel.addRow(row);
+                            }
+                            loadBtn.setText("Load File...");
+                            loadBtn.setEnabled(true);
+                        });
+                    } catch (Exception ex) {
+                        SwingUtilities.invokeLater(() -> {
+                            JOptionPane.showMessageDialog(mainPanel, "Error loading file: " + ex.getMessage(), "Error",
+                                    JOptionPane.ERROR_MESSAGE);
+                            loadBtn.setText("Load File...");
+                            loadBtn.setEnabled(true);
+                        });
                     }
-                } catch (Exception ex) {
-                    JOptionPane.showMessageDialog(mainPanel, "Error loading file: " + ex.getMessage(), "Error",
-                            JOptionPane.ERROR_MESSAGE);
-                }
+                }).start();
             }
         });
     }
@@ -666,6 +721,35 @@ public class PathBreakerTab implements IMessageEditorController {
         rowSorter.setRowFilter(filter);
     }
 
+    private void setUIEnabled(boolean enabled) {
+        injectModeBox.setEnabled(enabled);
+        fuzzTargetBox.setEnabled(enabled);
+        threadsSpinner.setEnabled(enabled);
+        permuteHeadersBox.setEnabled(enabled);
+        onlyHitsBox.setEnabled(enabled);
+        hideErrorsBox.setEnabled(enabled);
+        programmaticBox.setEnabled(enabled);
+        filterCodesField.setEnabled(enabled);
+
+        // Disable the load/clear buttons to guard wordlists during execution
+        for (Component c : headersPanel.getComponents()) {
+            if (c instanceof JPanel) {
+                for (Component sub : ((JPanel) c).getComponents()) {
+                    if (sub instanceof JButton)
+                        sub.setEnabled(enabled);
+                }
+            }
+        }
+        for (Component c : payloadsPanel.getComponents()) {
+            if (c instanceof JPanel) {
+                for (Component sub : ((JPanel) c).getComponents()) {
+                    if (sub instanceof JButton)
+                        sub.setEnabled(enabled);
+                }
+            }
+        }
+    }
+
     private void startFuzz() {
         if (currentTarget == null || requestEditor.getMessage() == null || requestEditor.getMessage().length == 0) {
             JOptionPane.showMessageDialog(mainPanel,
@@ -700,6 +784,8 @@ public class PathBreakerTab implements IMessageEditorController {
         progressBar.setValue(0);
         progressBar.setString("Starting...");
         statusLabel.setText("Running...");
+
+        setUIEnabled(false);
 
         FuzzConfig config = buildConfig();
 
