@@ -219,6 +219,21 @@ public class FuzzEngine {
      * Ported from build_paths() in exemplo.py.
      */
     public static List<String[]> buildPaths(String basePath, List<String> payloads, String injectMode) {
+        if ("all".equals(injectMode)) {
+            List<String[]> aggregatedResults = new ArrayList<>();
+            Set<String> uniquePaths = new HashSet<>();
+            String[] strategies = { "tail", "prefix", "replace", "mid:1", "mid:2", "mid:3" };
+            for (String strategy : strategies) {
+                List<String[]> subset = buildPaths(basePath, payloads, strategy);
+                for (String[] res : subset) {
+                    if (uniquePaths.add(res[1])) {
+                        aggregatedResults.add(res);
+                    }
+                }
+            }
+            return aggregatedResults;
+        }
+
         String[] segs = basePath.replaceAll("^/+|/+$", "").split("/", -1);
         List<String[]> results = new ArrayList<>();
 
@@ -517,6 +532,7 @@ public class FuzzEngine {
                         for (int i = 1; i < entries.size(); i++) {
                             combo.put(entries.get(i).getKey(), entries.get(i).getValue());
                             headerPayloads.add(new java.util.LinkedHashMap<>(combo));
+                // 
                         }
                     }
                 } else {
@@ -528,12 +544,14 @@ public class FuzzEngine {
         // Retain futures so we can cancel on stop
         List<Future<?>> futures = new ArrayList<>();
 
+                    
         final String finalBasePath = basePath;
         Thread orchestrator = new Thread(() -> {
             try {
                 // Explicit Baseline task executed synchronously on background thread so it's always Row 0
                 FuzzResult baseResult = sendRequest(api, service, finalBasePath, "[baseline]", Collections.emptyMap(),
                         fMethod, fProtocol, fHeadersBlock, fBodyBlock, true);
+                        
                 if (!executor.isShutdown()) {
                     SwingUtilities.invokeLater(() -> onResult.accept(baseResult));
                 }
@@ -555,7 +573,7 @@ public class FuzzEngine {
                         if (headers.size() == 1) {
                             headLabel = "[H: " + headers.keySet().iterator().next() + "]";
                         } else if (headers.size() == config.extraHeaders.size()) {
-                            headLabel = "[H: All]";
+                            headLabel = "[H: all]";
                         } else {
                             headLabel = "[H: " + headers.size() + "]";
                         }
@@ -568,6 +586,7 @@ public class FuzzEngine {
                     if (finalLabel.trim().isEmpty())
                         finalLabel = "[base]";
 
+                                    
                     final String fLabel = finalLabel.trim();
                     final Map<String, String> fHeaders = headers;
 
@@ -591,7 +610,6 @@ public class FuzzEngine {
                         if (Thread.currentThread().isInterrupted())
                             return;
 
-                        // Apply filters
                         if (!filterCodes.isEmpty() && !filterCodes.contains(result.statusCode))
                             return;
                         if (config.onlyHits && !result.isInteresting)
@@ -600,6 +618,7 @@ public class FuzzEngine {
                             return;
 
                         SwingUtilities.invokeLater(() -> onResult.accept(result));
+
                     });
                     futures.add(f);
                 }
@@ -614,7 +633,7 @@ public class FuzzEngine {
             }
             SwingUtilities.invokeLater(onDone);
         });
-        
+
         orchestrator.setDaemon(true);
         orchestrator.start();
 

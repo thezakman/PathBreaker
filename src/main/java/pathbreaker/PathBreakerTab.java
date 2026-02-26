@@ -31,7 +31,7 @@ public class PathBreakerTab implements IMessageEditorController {
     private static final Color BG_MID = new Color(0x252526);
     private static final Color BG_LIGHT = new Color(0x2d2d30);
     private static final Color FG = new Color(0xd4d4d4);
-    private static final Color GREEN = new Color(0x00FF41);
+    private static final Color GREEN = new Color(0x00FF42);
     private static final Color CYAN = new Color(0x00CFFF);
     private static final Color RED = new Color(0xFF4444);
     private static final Color ORANGE = new Color(0xFFA500);
@@ -259,7 +259,7 @@ public class PathBreakerTab implements IMessageEditorController {
         row1.add(clearBtn);
 
         row1.add(styled(new JLabel("Mode:"), FG));
-        injectModeBox = new JComboBox<>(new String[] { "tail", "prefix", "mid:1", "replace" });
+        injectModeBox = new JComboBox<>(new String[] { "all", "tail", "prefix", "replace", "mid:1", "mid:2", "mid:3" });
         styleCombo(injectModeBox);
         row1.add(injectModeBox);
 
@@ -840,8 +840,10 @@ public class PathBreakerTab implements IMessageEditorController {
                         host = hp[0];
                         try {
                             port = Integer.parseInt(hp[1]);
-                            if (port == 80 || port == 8080) secure = false;
-                        } catch (Exception ignored) {}
+                            if (port == 80 || port == 8080)
+                                secure = false;
+                        } catch (Exception ignored) {
+                        }
                     }
                     break;
                 }
@@ -891,7 +893,7 @@ public class PathBreakerTab implements IMessageEditorController {
                 () -> {
                     if (running.compareAndSet(true, false)) { // Only update UI if we were still running naturally
                         actionBtn.setText("▶ Start");
-                        actionBtn.setBackground(GREEN);
+                        actionBtn.setBackground(ACCENT);
                         int t = tested.get();
                         int h = hits.get();
                         progressBar.setValue(total);
@@ -903,14 +905,15 @@ public class PathBreakerTab implements IMessageEditorController {
     }
 
     private void stopFuzz() {
-        if (!running.get()) return;
+        if (!running.get())
+            return;
         running.set(false);
         if (activeExecutor != null && !activeExecutor.isShutdown()) {
             activeExecutor.shutdownNow();
         }
         activeExecutor = null;
         actionBtn.setText("▶ Start");
-        actionBtn.setBackground(GREEN);
+        actionBtn.setBackground(ACCENT);
         statusLabel.setText("Stopped");
         int t = tested.get();
         int h = hits.get();
