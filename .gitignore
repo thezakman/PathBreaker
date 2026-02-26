@@ -1,5 +1,7 @@
 # Build output
 build/
+out/
+bin/
 
 # Gradle cache & metadata
 .gradle/
@@ -7,6 +9,7 @@ build/
 # IDE
 .idea/
 *.iml
+*.iws
 .vscode/
 *.classpath
 *.project
@@ -14,7 +17,15 @@ build/
 
 # OS
 .DS_Store
+.AppleDouble
+.LSOverride
 Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Compiled class files & Logs
+*.class
+*.log
 
 # Local overrides
 local.properties
