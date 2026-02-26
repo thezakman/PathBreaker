@@ -19,13 +19,16 @@ PathBreaker is a Burp Suite extension built for penetration testers who need to 
 
 ## Features
 
-- **Path Fuzzing** — Four injection modes: `tail`, `prefix`, `mid:N`, and `replace`
+- **Path Fuzzing** — Five injection modes: `all`, `tail`, `prefix`, `mid:N`, and `replace`
 - **Header Fuzzing** — Inject and permute custom HTTP headers using the built-in dictionary or importing custom wordlists via "Load File..."
 - **Programmatic Variations** — Auto-generates protocol-level path anomalies (encoding tricks, slash variants, traversal prefixes, etc.)
 - **Built-in Wordlist** — 212+ curated path traversal and access-control bypass payloads
 - **Custom Payloads** — Import your own wordlist from a file
-- **Header Dictionary** — Manage headers with per-entry enable/disable toggles, plus "Clear All" for quick resets
+- **Header Dictionary** — Manage headers with per-entry enable/disable toggles, plus "Restore Default" and "Clear All" interactions
 - **Multi-threaded Engine** — Configurable thread pool (1–50 threads)
+- **Standalone Editor** — Paste and edit raw HTTP headers or paths manually inside the tools Request pane
+- **UI Safety Locks** — Prevents interference by freezing configuration fields during active dictionary attacks
+- **Asynchronous Parsers** — Smoothly load million-line dictionary files in the background without UI hangs
 - **Real-time Results** — Live progress tracking with color-coded status codes
 - **Result Filtering** — Filter by status codes, "Only Hits", "Hide Errors"
 - **Request/Response Viewer** — Inspect raw request and response side-by-side
@@ -88,6 +91,7 @@ build/libs/PathBreaker-all.jar
 
 | Mode | Behavior |
 |------|----------|
+| `all` | Automatically computes and tests the payload against all injection strategies dynamically |
 | `tail` | Appends payload after the base path: `/base/payload` |
 | `prefix` | Prepends payload before the base path: `/payload/base` |
 | `mid:N` | Inserts payload at segment N of the path |
@@ -117,7 +121,7 @@ build/libs/PathBreaker-all.jar
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| Inject Mode | `tail` | How payloads are injected into the path |
+| Inject Mode | `all` | How payloads are injected into the path |
 | Fuzz Target | `Paths` | What to fuzz (paths, headers, or both) |
 | Threads | `10` | Number of concurrent fuzzing threads |
 | Permute Headers | `true` | Generate all header combinations |
