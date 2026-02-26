@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="src/main/resources/pathbreaker/PathBreaker.png" alt="PathBreaker Logo" width="180"/>
+  <img src="src/main/resources/pathbreaker/PathBreaker.png" alt="PathBreaker Logo" width="512"/>
 
   # PathBreaker
   **A professional path and header fuzzing extension for Burp Suite**
