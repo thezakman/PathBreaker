@@ -9,6 +9,9 @@ import javax.swing.SwingUtilities;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.function.Consumer;
+import burp.api.montoya.scanner.audit.issues.AuditIssue;
+import burp.api.montoya.scanner.audit.issues.AuditIssueConfidence;
+import burp.api.montoya.scanner.audit.issues.AuditIssueSeverity;
 
 public class FuzzEngine {
 
@@ -440,22 +443,13 @@ public class FuzzEngine {
 
             String bodyStr = new String(bodyBytes, java.nio.charset.StandardCharsets.UTF_8);
 
-            // Create persistent, detached copies to avoid Native Binding NPE or Blank
-            // Rendering from GC'd thread memory
-            burp.api.montoya.http.message.requests.HttpRequest persistentReq = burp.api.montoya.http.message.requests.HttpRequest
-                    .httpRequest(
-                            service,
-                            request.toByteArray());
-            burp.api.montoya.http.message.responses.HttpResponse persistentResp = burp.api.montoya.http.message.responses.HttpResponse
-                    .httpResponse(
-                            httpResponse.toByteArray());
+            // Use copyToTempFile to create a persistent, detached instance of the complete
+            // HttpRequestResponse
+            // This prevents Native Binding NPE while preserving the HttpService needed for
+            // the Render tab to work.
+            burp.api.montoya.http.message.HttpRequestResponse detachedReqResp = response.copyToTempFile();
 
-            burp.api.montoya.http.message.HttpRequestResponse detachedReqResp = burp.api.montoya.http.message.HttpRequestResponse
-                    .httpRequestResponse(
-                            persistentReq,
-                            persistentResp);
-
-            return new FuzzResult(label, rawPath, (int) persistentResp.statusCode(),
+            return new FuzzResult(label, rawPath, (int) httpResponse.statusCode(),
                     bodyLength, hdrs.toString(), bodyStr, "", rawRequestStr, detachedReqResp);
 
         } catch (Exception e) {
@@ -603,6 +597,24 @@ public class FuzzEngine {
                         return;
                     if (config.hideErrors && result.statusCode == null)
                         return;
+
+                    // Publish to Burp Issues if interesting
+                    if (result.isInteresting && result.reqResp != null) {
+                        AuditIssue issue = AuditIssue.auditIssue(
+                                "PathBreaker Fuzz Hit: " + result.label,
+                                "PathBreaker discovered a potentially interesting response (" + result.statusCode + ") at: " + result.rawPath,
+                                "Review the response to determine if it exposes unintended access or information.",
+                                result.reqResp.request().url(),
+                                AuditIssueSeverity.INFORMATION,
+                                AuditIssueConfidence.FIRM,
+                                "N/A", // background
+                                "N/A", // remediation
+                                AuditIssueSeverity.INFORMATION,
+                                result.reqResp
+                        );
+                        api.siteMap().add(issue);
+                    }
+                                        
 
                     SwingUtilities.invokeLater(() -> onResult.accept(result));
                 });

@@ -706,6 +706,8 @@ public class PathBreakerTab {
 
         activeExecutor = FuzzEngine.runFuzz(api, safeService, baseRequestRaw, config,
                 result -> {
+                    if (!running.get())
+                        return; // hard stop
                     addResult(result);
                     int t = tested.incrementAndGet();
                     if (result.isInteresting)
@@ -715,14 +717,15 @@ public class PathBreakerTab {
                     progressBar.setString(t + " / " + total + " tested — " + h + " hits");
                 },
                 () -> {
-                    running.set(false);
-                    actionBtn.setText("▶ Start");
-                    actionBtn.setBackground(ACCENT);
-                    int t = tested.get();
-                    int h = hits.get();
-                    progressBar.setValue(total);
-                    progressBar.setString("Done — " + t + " tested, " + h + " hits");
-                    statusLabel.setText("Finished");
+                    if (running.compareAndSet(true, false)) { // Only update UI if we were still running naturally
+                        actionBtn.setText("▶ Start");
+                        actionBtn.setBackground(ACCENT);
+                        int t = tested.get();
+                        int h = hits.get();
+                        progressBar.setValue(total);
+                        progressBar.setString("Done — " + t + " tested, " + h + " hits");
+                        statusLabel.setText("Finished");
+                    }
                 });
     }
 
@@ -731,6 +734,7 @@ public class PathBreakerTab {
         if (activeExecutor != null && !activeExecutor.isShutdown()) {
             activeExecutor.shutdownNow();
         }
+        activeExecutor = null;
         actionBtn.setText("▶ Start");
         actionBtn.setBackground(ACCENT);
         statusLabel.setText("Stopped");
