@@ -56,19 +56,38 @@ public class PathBreakerTab implements IMessageEditorController {
     private JButton actionBtn;
     private JButton clearBtn;
 
-    // Header defs
-    private static final String[][] HEADER_DEFS = {
-            { "Referer", "" },
-            { "X-Forwarded-For", "127.0.0.1" },
-            { "X-Real-IP", "127.0.0.1" },
-            { "X-Forwarded-Host", "localhost" },
-            { "X-Original-URL", "/" },
-            { "X-Rewrite-URL", "/" },
-            { "X-Custom-IP-Authorization", "127.0.0.1" },
-            { "Origin", "null" },
-            { "X-Host", "localhost" },
-            { "True-Client-IP", "127.0.0.1" },
-    };
+    private List<String[]> getBuiltinHeaders() {
+        List<String[]> defs = new ArrayList<>();
+        try (java.io.InputStream is = PathBreakerTab.class.getResourceAsStream("/wordlists/header-pairs.txt")) {
+            if (is != null) {
+                try (java.io.BufferedReader reader = new java.io.BufferedReader(
+                        new java.io.InputStreamReader(is, java.nio.charset.StandardCharsets.UTF_8))) {
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        line = line.trim();
+                        if (line.isEmpty() || line.startsWith("#"))
+                            continue;
+                        int idx = line.indexOf(':');
+                        if (idx > 0) {
+                            String k = line.substring(0, idx).trim();
+                            String v = idx < line.length() - 1 ? line.substring(idx + 1).trim() : "";
+                            defs.add(new String[] { k, v });
+                        }
+                    }
+                }
+            } else {
+                System.err.println("PathBreaker: Could not find /wordlists/header-pairs.txt in resources!");
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        if (defs.isEmpty()) {
+            // Failsafe
+            defs.add(new String[] { "X-Forwarded-For", "127.0.0.1" });
+        }
+        return defs;
+    }
+
     private JTable headersTable;
     private DefaultTableModel headersTableModel;
     private JPanel headersPanel;
@@ -338,7 +357,7 @@ public class PathBreakerTab implements IMessageEditorController {
             }
         };
 
-        for (String[] def : HEADER_DEFS) {
+        for (String[] def : getBuiltinHeaders()) {
             headersTableModel.addRow(new Object[] { false, def[0], def[1] });
         }
 
@@ -370,7 +389,7 @@ public class PathBreakerTab implements IMessageEditorController {
         clearBtnHeaders.addActionListener(e -> headersTableModel.setRowCount(0));
         restoreBtn.addActionListener(e -> {
             headersTableModel.setRowCount(0);
-            for (String[] def : HEADER_DEFS) {
+            for (String[] def : getBuiltinHeaders()) {
                 headersTableModel.addRow(new Object[] { false, def[0], def[1] });
             }
         });
@@ -595,8 +614,7 @@ public class PathBreakerTab implements IMessageEditorController {
         };
 
         // Populate builtin wordlist
-        String[] builtinPayloads = FuzzEngine.BUILTIN_WORDLIST.split("\n");
-        for (String payload : builtinPayloads) {
+        for (String payload : FuzzEngine.getBuiltinPaths()) {
             if (!payload.trim().isEmpty()) {
                 payloadsTableModel.addRow(new Object[] { true, payload });
             }
@@ -630,8 +648,7 @@ public class PathBreakerTab implements IMessageEditorController {
         clearBtnPayloads.addActionListener(e -> payloadsTableModel.setRowCount(0));
         restoreBtn.addActionListener(e -> {
             payloadsTableModel.setRowCount(0);
-            String[] defaultPayloads = FuzzEngine.BUILTIN_WORDLIST.split("\n");
-            for (String payload : defaultPayloads) {
+            for (String payload : FuzzEngine.getBuiltinPaths()) {
                 if (!payload.trim().isEmpty()) {
                     payloadsTableModel.addRow(new Object[] { true, payload.trim() });
                 }
@@ -780,7 +797,8 @@ public class PathBreakerTab implements IMessageEditorController {
         totalCount = 0;
 
         actionBtn.setText("⏹ Stop");
-        actionBtn.setBackground(new Color(0x8B0000));
+        actionBtn.setBackground(Color.RED);
+        actionBtn.setForeground(Color.WHITE);
         progressBar.setValue(0);
         progressBar.setString("Starting...");
         statusLabel.setText("Running...");
@@ -887,8 +905,9 @@ public class PathBreakerTab implements IMessageEditorController {
                         }
                     }
                     int h = hits.get();
-                    progressBar.setValue(t);
-                    progressBar.setString(t + " / " + total + " tested — " + h + " hits");
+                    int displayed = Math.min(t, total);
+                    progressBar.setValue(displayed);
+                    progressBar.setString(displayed + " / " + total + " tested — " + h + " hits");
                 },
                 () -> {
                     if (running.compareAndSet(true, false)) { // Only update UI if we were still running naturally
@@ -915,8 +934,10 @@ public class PathBreakerTab implements IMessageEditorController {
         actionBtn.setText("▶ Start");
         actionBtn.setBackground(ACCENT);
         statusLabel.setText("Stopped");
-        int t = tested.get();
+        int t = Math.min(tested.get(), totalCount);
+        tested.set(t);
         int h = hits.get();
+        progressBar.setValue(t);
         progressBar.setString("Stopped at " + t + " / " + totalCount + " — " + h + " hits");
         setUIEnabled(true);
     }
@@ -1102,8 +1123,6 @@ public class PathBreakerTab implements IMessageEditorController {
                     rowFg = YELLOW;
                 }
                 setForeground(rowFg);
-            } else {
-                setForeground(isSelected ? Color.WHITE : FG);
             }
             return this;
         }
@@ -1125,11 +1144,19 @@ public class PathBreakerTab implements IMessageEditorController {
                     if (ts != null) {
                         return new IHttpService() {
                             @Override
-                            public String getHost() { return ts.host(); }
+                            public String getHost() {
+                                return ts.host();
+                            }
+
                             @Override
-                            public int getPort() { return ts.port(); }
+                            public int getPort() {
+                                return ts.port();
+                            }
+
                             @Override
-                            public String getProtocol() { return ts.secure() ? "https" : "http"; }
+                            public String getProtocol() {
+                                return ts.secure() ? "https" : "http";
+                            }
                         };
                     }
                 }
@@ -1141,6 +1168,7 @@ public class PathBreakerTab implements IMessageEditorController {
         burp.api.montoya.http.HttpService ts = currentTarget.request().httpService();
         if (ts != null) {
             return new IHttpService() {
+
                 @Override
                 public String getHost() {
                     return ts.host();
@@ -1156,6 +1184,7 @@ public class PathBreakerTab implements IMessageEditorController {
                     return ts.secure() ? "https" : "http";
                 }
             };
+
         }
         return null;
     }

